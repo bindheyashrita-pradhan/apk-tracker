@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>APK Tracker</title>
+  </head>
+  <body>
+    <!-- App Header -->
+    <header class="header">
+      <h1>APK Tracker</h1>
+      <p>Target: Realme Narzo 50 (arm64-v8a)</p>
+    </header>
+
+    <!-- Main App Area -->
+    <main class="container">
+      
+      <!-- Input Box Area -->
+      <div class="card">
+        <h2>Add App to Track</h2>
+        <input type="text" id="apkUrl" placeholder="Paste APKMirror link here..." />
+        
+        <div class="options">
+          <label><input type="checkbox" id="stableCheck" checked> Stable</label>
+          <label><input type="checkbox" id="betaCheck"> Beta / Alpha</label>
+        </div>
+
+        <button id="addBtn">Track App</button>
+      </div>
+
+      <!-- Watchlist Area -->
+      <div class="card">
+        <h2>My Watchlist</h2>
+        
+        <!-- The Check Updates Button -->
+        <button id="checkUpdatesBtn" style="background-color: #2196f3; color: white; margin-bottom: 15px;">
+          🔄 Check for Updates Now
+        </button>
+
+        <ul id="watchlist">
+          <p style="color: #888;">No apps added yet.</p>
+        </ul>
+      </div>
+
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

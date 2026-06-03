@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">APK Tracker</string>
+    <string name="title_activity_main">APK Tracker</string>
+    <string name="package_name">com.raja.apktracker</string>
+    <string name="custom_url_scheme">com.raja.apktracker</string>
+</resources>

@@ -1,0 +1,95 @@
+/* Base App Styling (Dark Mode) */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #121212;
+  color: #ffffff;
+}
+
+/* The Top Banner */
+.header {
+  background-color: #1f1f1f;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 2px solid #00c853;
+}
+
+.header h1 { margin: 0; font-size: 24px; }
+.header p { margin: 5px 0 0; font-size: 14px; color: #aaaaaa; }
+
+/* The Main Background Area */
+.container { padding: 20px; }
+
+/* The Dark Grey Boxes (Cards) */
+.card {
+  background-color: #1e1e1e;
+  padding: 15px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.card h2 { margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #00c853; }
+
+/* The Text Input Box */
+input[type="text"] {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background-color: #2c2c2c;
+  color: white;
+  box-sizing: border-box;
+  margin-bottom: 15px;
+}
+
+input[type="text"]::placeholder { color: #888; }
+
+/* The Checkboxes */
+.options {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+/* The Big Green Button */
+button {
+  width: 100%;
+  padding: 12px;
+  background-color: #00c853;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+button:active { background-color: #009624; }
+
+/* Styling for the Watchlist List Items */
+ul { 
+  padding: 0; 
+  margin: 0;
+}
+
+.app-item {
+  background-color: #2c2c2c;
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 8px;
+  list-style: none;
+  border-left: 4px solid #00c853; /* Cool green line on the left side */
+}
+
+.app-item-url { 
+  font-size: 14px; 
+  font-weight: bold; 
+  word-break: break-all; /* Prevents long URLs from pushing off the screen */
+}
+
+.app-item-tags { 
+  font-size: 12px; 
+  color: #00c853; 
+  margin-top: 5px; 
+  display: block;
+}
