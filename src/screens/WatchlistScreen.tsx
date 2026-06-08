@@ -28,7 +28,7 @@ export const WatchlistScreen = ({ navigation }: any) => {
 
   const handleCheckUpdate = (app: WatchlistItem) => {
     setScanningApp(app);
-    setScrapeUrl(app.searchTerm); // 💥 WE FEED THE DIRECT URL TO THE BOT!
+    setScrapeUrl(app.searchTerm); // We feed the direct URL to the invisible bot
   };
 
   const handleDelete = async (packageName: string) => {
@@ -41,8 +41,12 @@ export const WatchlistScreen = ({ navigation }: any) => {
 
     if (htmlCode === 'NO_RESULTS') {
       Alert.alert('Not Found', 'Could not find a stable release on this page.');
-      setScrapeUrl(null); setScanningApp(null); return;
+      setScrapeUrl(null); 
+      setScanningApp(null); 
+      return;
     }
+    
+    // Ignore Cloudflare checks
     if (htmlCode.includes('Just a moment') || htmlCode.includes('Cloudflare')) return;
 
     setScrapeUrl(null); 
@@ -51,20 +55,26 @@ export const WatchlistScreen = ({ navigation }: any) => {
     const $ = cheerio.load(htmlCode);
     const variants: ApkVariant[] = [];
 
+    // 1. Extract Version Number (Supports infinite dots, hyphens, and letters!)
     const pageTitle = $('h1').text();
-    const versionMatch = pageTitle.match(/(\d+\.\d+\.\d+\.\d+)/) || pageTitle.match(/(\d+\.\d+\.\d+)/) || pageTitle.match(/(\d+\.\d+)/);
+    const versionMatch = pageTitle.match(/(\d+\.\d+[a-zA-Z0-9.\-]*)/);
     const latestVersion = versionMatch ? versionMatch[1] : null;
 
     if (!latestVersion) {
-      Alert.alert('Scan Failed', 'Could not extract the version number.');
-      setScanningApp(null); return;
+      Alert.alert('Scan Failed', 'Could not extract the version number from the page.');
+      setScanningApp(null); 
+      return;
     }
 
+    // 2. Extract Variants and the Date (Locked specifically to the Variant Table!)
+    let releaseDate = "Unknown Date";
     let rows = $('.table-row');
     if (rows.length === 0) rows = $('.variants-table .table-row');
 
     rows.each((_, row) => {
       const rowText = $(row).text().toLowerCase();
+      const originalRowText = $(row).text(); // Keep capital letters for date matching
+      
       let link = null;
       $(row).find('a').each((_, aTag) => {
         const href = $(aTag).attr('href');
@@ -82,11 +92,20 @@ export const WatchlistScreen = ({ navigation }: any) => {
         else if (rowText.includes('400dpi')) dpi = '400dpi';
         else if (rowText.includes('320dpi')) dpi = '320dpi';
 
+        // 📅 GRAB THE DATE DIRECTLY FROM THIS EXACT ROW! 
+        if (releaseDate === "Unknown Date") {
+          const dateMatch = originalRowText.match(/([A-Z][a-z]{2,8}\s\d{1,2},\s\d{4})/);
+          if (dateMatch && dateMatch[1]) {
+            releaseDate = dateMatch[1];
+          }
+        }
+
         const downloadLink = link.startsWith('http') ? link : `${APK_MIRROR_BASE_URL}${link}`;
         variants.push({ version: latestVersion, arch, dpi, downloadUrl: downloadLink });
       }
     });
 
+    // 3. Send to the Math Brains!
     const bestMatch = findBestVariant(variants);
 
     if (bestMatch.variant) {
@@ -94,11 +113,11 @@ export const WatchlistScreen = ({ navigation }: any) => {
       if (hasUpdate) {
         Alert.alert(
           '🚀 UPDATE FOUND!',
-          `Current: v${scanningApp.currentVersion}\nNew: v${latestVersion}\n\n${bestMatch.message}`,
+          `Current: v${scanningApp.currentVersion}\nNew: v${latestVersion}\n📅 Released: ${releaseDate}\n\n${bestMatch.message}`,
           [{ text: 'Cancel', style: 'cancel' }, { text: 'Download Update', onPress: () => Linking.openURL(bestMatch.variant!.downloadUrl) }]
         );
       } else {
-        Alert.alert('Up To Date! ✅', `You already have the newest version (v${scanningApp.currentVersion}).`);
+        Alert.alert('Up To Date! ✅', `You already have the newest version (v${scanningApp.currentVersion}).\n📅 Latest release: ${releaseDate}`);
       }
     } else {
       Alert.alert('No Compatible APK', `Found an update (v${latestVersion}), but couldn't find an arm64-v8a version for your phone.`);
@@ -107,41 +126,27 @@ export const WatchlistScreen = ({ navigation }: any) => {
     setScanningApp(null);
   };
 
-  // 🤖 THE ULTIMATE DIRECT LINK BOT
-// 🤖 THE ULTIMATE DIRECT LINK BOT (Now ignores Smartwatches & VR!)
-const autoClickerBot = `
+  // 🤖 THE ULTIMATE DIRECT LINK BOT (Ignores Smartwatches, VR, Betas, Klar, etc.)
+  const autoClickerBot = `
     setTimeout(function() {
-      // Are we on the Main App Page (the URL you pasted)?
       if (!window.location.href.includes('-release/')) {
-        
         var titles = document.querySelectorAll('.appRow .appRowTitle a, .appRow a.fontBlack');
         var stableLink = null;
-        
         for (var i = 0; i < titles.length; i++) {
           var text = titles[i].textContent.toLowerCase();
-          
-          // 🛑 THE ULTIMATE FILTER: Skip Betas AND Wear OS / Daydream / TV / Auto
-          if (!text.includes('beta') && 
-              !text.includes('alpha') && 
-              !text.includes('developer') && 
-              !text.includes('nightly') &&
-              !text.includes('wear os') && 
-              !text.includes('daydream') && 
-              !text.includes('tv') && 
-              !text.includes('auto')) {
-            
+          if (!text.includes('beta') && !text.includes('alpha') && !text.includes('developer') && 
+              !text.includes('nightly') && !text.includes('wear os') && !text.includes('daydream') && 
+              !text.includes('tv') && !text.includes('auto') && !text.includes('klar') && !text.includes('lite')) {
             stableLink = titles[i];
             break; 
           }
         }
-        
         if (stableLink) {
           window.location.href = stableLink.href; 
         } else {
           window.ReactNativeWebView.postMessage('NO_RESULTS');
         }
       } 
-      // Are we on the Download Page?
       else {
         window.ReactNativeWebView.postMessage(document.documentElement.outerHTML);
       }
@@ -154,7 +159,16 @@ const autoClickerBot = `
       <FlatList
         data={savedApps}
         keyExtractor={(item) => item.packageName}
-        ListEmptyComponent={<Text style={{ color: isDarkMode ? '#AAAAAA' : '#666666', textAlign: 'center', marginTop: 20 }}>Your watchlist is empty.</Text>}
+        ListHeaderComponent={
+          <Text style={{ color: isDarkMode ? '#00c853' : '#009624', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 }}>
+            My Watchlist 🚀
+          </Text>
+        }
+        ListEmptyComponent={
+          <Text style={{ color: isDarkMode ? '#AAAAAA' : '#666666', textAlign: 'center', marginTop: 20 }}>
+            Your watchlist is empty. Add an app below!
+          </Text>
+        }
         renderItem={({ item }) => (
           <View style={[styles.card, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
             <View style={{ flex: 1 }}>
@@ -172,7 +186,11 @@ const autoClickerBot = `
                 onPress={() => handleCheckUpdate(item)}
                 disabled={scanningApp !== null}
               >
-                {scanningApp?.packageName === item.packageName ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.checkButtonText}>Check</Text>}
+                {scanningApp?.packageName === item.packageName ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.checkButtonText}>Check</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -183,10 +201,9 @@ const autoClickerBot = `
         <Text style={styles.addButtonText}>+ Add a New App</Text>
       </TouchableOpacity>
 
-      {/* 🤖 VISIBLE BOT CAMERA */}
+      {/* 👻 CRASH-PROOF INVISIBLE BOT */}
       {scrapeUrl && (
-        <View style={{ width: '100%', height: 350, marginTop: 20, borderWidth: 3, borderColor: '#00c853', borderRadius: 8, overflow: 'hidden' }}>
-          <Text style={{ textAlign: 'center', backgroundColor: '#00c853', color: 'white', fontWeight: 'bold' }}>🤖 BOT CAMERA (WATCH IT WORK)</Text>
+        <View style={{ width: 0, height: 0, overflow: 'hidden', opacity: 0 }}>
           <WebView
             source={{ uri: scrapeUrl }}
             userAgent="Mozilla/5.0 (Linux; Android 14; RMX3571) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -196,7 +213,6 @@ const autoClickerBot = `
               const { nativeEvent } = syntheticEvent;
               setScrapeUrl(null);
               setScanningApp(null);
-              // 💥 This will now pop up the EXACT computer error code!
               Alert.alert('Browser Error', `Code: ${nativeEvent.code}\nReason: ${nativeEvent.description}`);
             }}
           />
