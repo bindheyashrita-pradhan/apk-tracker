@@ -28,7 +28,7 @@ export const WatchlistScreen = ({ navigation }: any) => {
 
   const handleCheckUpdate = (app: WatchlistItem) => {
     setScanningApp(app);
-    setScrapeUrl(app.searchTerm); // We feed the direct URL to the invisible bot
+    setScrapeUrl(app.searchTerm); 
   };
 
   const handleDelete = async (packageName: string) => {
@@ -41,12 +41,9 @@ export const WatchlistScreen = ({ navigation }: any) => {
 
     if (htmlCode === 'NO_RESULTS') {
       Alert.alert('Not Found', 'Could not find a stable release on this page.');
-      setScrapeUrl(null); 
-      setScanningApp(null); 
-      return;
+      setScrapeUrl(null); setScanningApp(null); return;
     }
     
-    // Ignore Cloudflare checks
     if (htmlCode.includes('Just a moment') || htmlCode.includes('Cloudflare')) return;
 
     setScrapeUrl(null); 
@@ -55,25 +52,22 @@ export const WatchlistScreen = ({ navigation }: any) => {
     const $ = cheerio.load(htmlCode);
     const variants: ApkVariant[] = [];
 
-    // 1. Extract Version Number (Supports infinite dots, hyphens, and letters!)
     const pageTitle = $('h1').text();
     const versionMatch = pageTitle.match(/(\d+\.\d+[a-zA-Z0-9.\-]*)/);
     const latestVersion = versionMatch ? versionMatch[1] : null;
 
     if (!latestVersion) {
       Alert.alert('Scan Failed', 'Could not extract the version number from the page.');
-      setScanningApp(null); 
-      return;
+      setScanningApp(null); return;
     }
 
-    // 2. Extract Variants and the Date (Locked specifically to the Variant Table!)
     let releaseDate = "Unknown Date";
     let rows = $('.table-row');
     if (rows.length === 0) rows = $('.variants-table .table-row');
 
     rows.each((_, row) => {
       const rowText = $(row).text().toLowerCase();
-      const originalRowText = $(row).text(); // Keep capital letters for date matching
+      const originalRowText = $(row).text(); 
       
       let link = null;
       $(row).find('a').each((_, aTag) => {
@@ -92,7 +86,6 @@ export const WatchlistScreen = ({ navigation }: any) => {
         else if (rowText.includes('400dpi')) dpi = '400dpi';
         else if (rowText.includes('320dpi')) dpi = '320dpi';
 
-        // 📅 GRAB THE DATE DIRECTLY FROM THIS EXACT ROW! 
         if (releaseDate === "Unknown Date") {
           const dateMatch = originalRowText.match(/([A-Z][a-z]{2,8}\s\d{1,2},\s\d{4})/);
           if (dateMatch && dateMatch[1]) {
@@ -105,7 +98,6 @@ export const WatchlistScreen = ({ navigation }: any) => {
       }
     });
 
-    // 3. Send to the Math Brains!
     const bestMatch = findBestVariant(variants);
 
     if (bestMatch.variant) {
@@ -126,7 +118,6 @@ export const WatchlistScreen = ({ navigation }: any) => {
     setScanningApp(null);
   };
 
-  // 🤖 THE ULTIMATE DIRECT LINK BOT (Ignores Smartwatches, VR, Betas, Klar, etc.)
   const autoClickerBot = `
     setTimeout(function() {
       if (!window.location.href.includes('-release/')) {
@@ -156,11 +147,21 @@ export const WatchlistScreen = ({ navigation }: any) => {
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#F5F5F5' }]}>
+      
+{/* 🔥 PREMIUM CUSTOM TOP HEADER */}
+      <View style={[styles.topHeader, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
+        <Text style={[styles.mainTitle, { color: isDarkMode ? '#FFFFFF' : '#222222' }]}>
+          <Text style={{ color: '#2196F3' }}>APK</Text> Tracker
+        </Text>
+      </View>
+
       <FlatList
+        contentContainerStyle={{ padding: 20 }}
         data={savedApps}
         keyExtractor={(item) => item.packageName}
         ListHeaderComponent={
-          <Text style={{ color: isDarkMode ? '#00c853' : '#009624', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 }}>
+          /* 🔥 MY WATCHLIST (Left side, Smaller font!) */
+          <Text style={{ color: isDarkMode ? '#00c853' : '#009624', fontSize: 18, fontWeight: 'bold', textAlign: 'left', marginBottom: 20 }}>
             My Watchlist 🚀
           </Text>
         }
@@ -197,9 +198,12 @@ export const WatchlistScreen = ({ navigation }: any) => {
         )}
       />
 
-      <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddApp')}>
-        <Text style={styles.addButtonText}>+ Add a New App</Text>
-      </TouchableOpacity>
+      {/* Button fixed at the bottom padding */}
+      <View style={{ padding: 20, paddingTop: 0 }}>
+        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddApp')}>
+          <Text style={styles.addButtonText}>+ Add a New App</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* 👻 CRASH-PROOF INVISIBLE BOT */}
       {scrapeUrl && (
@@ -223,12 +227,29 @@ export const WatchlistScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  card: { padding: 15, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, borderLeftWidth: 4, borderLeftColor: '#00c853' },
+  container: { flex: 1 },
+topHeader: {
+    paddingTop: 50, 
+    paddingBottom: 20, // Gave it a tiny bit more breathing room
+    alignItems: 'center',
+    elevation: 6, // Makes the shadow pop a bit more
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 8,
+    borderBottomWidth: 1, // Adds a sleek border line
+    borderBottomColor: '#E0E0E0'
+  },
+  mainTitle: { 
+    fontSize: 28, // HUGE Font!
+    fontWeight: '900', 
+    letterSpacing: 0.5 
+  },
+  card: { padding: 15, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, borderLeftWidth: 4, borderLeftColor: '#00c853' },
   appName: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
   appDetails: { fontSize: 12, color: '#888' },
   checkButton: { backgroundColor: '#FF5722', padding: 12, borderRadius: 6, minWidth: 70, alignItems: 'center' },
   checkButtonText: { color: '#FFF', fontWeight: 'bold' },
-  addButton: { backgroundColor: '#2196F3', padding: 15, borderRadius: 8, marginTop: 10, width: '100%', alignItems: 'center' },
+  addButton: { backgroundColor: '#2196F3', padding: 15, borderRadius: 8, width: '100%', alignItems: 'center' },
   addButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }
 });

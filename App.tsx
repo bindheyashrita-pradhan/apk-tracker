@@ -15,19 +15,11 @@ const App = () => {
   const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("Attempting to start database...");
     initDatabase()
-      .then(() => {
-        console.log("Database started successfully!");
-        setDbReady(true);
-      })
-      .catch((error) => {
-        console.error("Database failed to start:", error);
-        setDbError(error.toString());
-      });
+      .then(() => setDbReady(true))
+      .catch((error) => setDbError(error.toString()));
   }, []);
 
-  // If there's an error, show it on the screen!
   if (dbError) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -37,7 +29,6 @@ const App = () => {
     );
   }
 
-  // If it's still loading, show a spinner instead of a white screen!
   if (!dbReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDarkMode ? '#121212' : '#F5F5F5' }}>
@@ -56,7 +47,12 @@ const App = () => {
           headerTitleStyle: { fontWeight: 'bold' },
         }}
       >
-        <Stack.Screen name="Watchlist" component={WatchlistScreen} options={{ title: 'My Watchlist' }} />
+        {/* 🛑 WE TURN OFF THE DEFAULT HEADER HERE */}
+        <Stack.Screen 
+          name="Watchlist" 
+          component={WatchlistScreen} 
+          options={{ headerShown: false }} 
+        />
         <Stack.Screen name="AddApp" component={AddAppScreen} options={{ title: 'Add New App' }} /> 
       </Stack.Navigator>
     </NavigationContainer>
