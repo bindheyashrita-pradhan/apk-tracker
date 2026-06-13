@@ -4,6 +4,23 @@ An automated, local-first Android application designed for power users to track,
 
 ---
 
+# 📱 APK Tracker
+
+An automated, local-first Android application designed for power users to track, bypass, and download specific APK variants (like `arm64-v8a`) directly from APKMirror without dealing with messy search results or Cloudflare blocks.
+
+<!-- 📸 BEAUTIFUL SCREENSHOT GALLERY -->
+<p align="center">
+  <img src="screenshots/update_check_batch.jpg" width="220" />
+  <img src="screenshots/single_app_add.jpg" width="220" />
+  <img src="screenshots/find_version_on_web.jpg" width="220" />
+  <img src="screenshots/batch_import.jpg" width="220" />
+  <img src="screenshots/batch_scan_done.jpg" width="220" />
+  <img src="screenshots/single_app_format.jpg" width="220" />
+  <img src="screenshots/update_check.jpg" width="220" />
+</p>
+
+---
+
 ## ⚡ Version 6 (Current: The Lightning Engine Update)
 **Branch:** `v6`  
 Version 6 completely removes the heavy, hidden `WebView` browser and replaces it with a blazing-fast native `fetch()` engine, speeding up the app by 10x while saving massive amounts of battery and RAM.
@@ -49,3 +66,5 @@ Transitioned from a Vanilla JS web-app to a native Android app using React Nativ
 2. Install dependencies: `npm install`
 3. Start the Metro Bundler: `npm start`
 4. Build and install via Android Studio.
+
+
