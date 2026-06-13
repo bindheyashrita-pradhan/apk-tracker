@@ -2,74 +2,106 @@ import * as cheerio from 'cheerio';
 import { ApkVariant } from '../types';
 import { APK_MIRROR_BASE_URL } from '../utils/constants';
 
-// 🎭 The Ultimate Disguise: Perfectly matches your Realme Narzo 50 5G!
-const SPOOFED_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Linux; Android 14; RMX3571) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Connection': 'keep-alive',
+// 🚀 THE MAGIC BACKDOOR
+const MAGIC_HEADERS = {
+  'User-Agent': 'APKUpdater-v3.0.3',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 };
 
-export const fetchLatestVersion = async (searchTerm: string): Promise<ApkVariant[] | null> => {
+export const fetchLatestVersion = async (directUrl: string) => {
   try {
-    // 1. Force the 'www.' prefix which Cloudflare prefers
-    const rssUrl = `https://www.apkmirror.com/feed/?s=${searchTerm}`;
-    console.log(`Checking APKMirror for: ${searchTerm}`);
+    // 1. Fetch the Main App Page
+    const response = await fetch(directUrl, { headers: MAGIC_HEADERS });
+    const html = await response.text();
     
-    // Use native fetch instead of axios
-    const rssResponse = await fetch(rssUrl, { headers: SPOOFED_HEADERS });
-    const rssText = await rssResponse.text();
-    
-    // Did Cloudflare catch us?
-    if (rssText.includes('Cloudflare') || rssText.includes('Just a moment')) {
-      console.log('Cloudflare blocked the RSS feed!');
-      return null;
+    if (html.includes('Cloudflare') || html.includes('Just a moment')) {
+      throw new Error('Cloudflare blocked the main page.');
     }
-    
-    const $ = cheerio.load(rssText, { xmlMode: true });
-    const firstItem = $('item').first();
-    if (firstItem.length === 0) return null;
-    
-    const title = firstItem.find('title').text();
-    const downloadPageUrl = firstItem.find('link').text();
-    const versionMatch = title.match(/(\d+\.\d+\.\d+\.\d+)/) || title.match(/(\d+\.\d+\.\d+)/) || title.match(/(\d+\.\d+)/);
-    
-    if (!versionMatch || !downloadPageUrl) return null;
-    const version = versionMatch[1];
-    
-    // 2. Fetch the Variants Page
-    const pageResponse = await fetch(downloadPageUrl, { headers: SPOOFED_HEADERS });
-    const pageText = await pageResponse.text();
-    
-    if (pageText.includes('Cloudflare') || pageText.includes('Just a moment')) {
-      console.log('Cloudflare blocked the Variants page!');
-      return null;
-    }
-    
-    const page$ = cheerio.load(pageText);
-    const variants: ApkVariant[] = [];
-    
-    let rows = page$('.table-row');
-    if (rows.length === 0) rows = page$('.variants-table .table-row');
-    
-    rows.each((_, row) => {
-      const cells = page$(row).find('.table-cell');
-      if (cells.length >= 2) {
-        const arch = page$(cells[0]).text().trim().toLowerCase();
-        const dpi = cells.length >= 2 ? page$(cells[1]).text().trim().toLowerCase() : 'nodpi';
-        const downloadCell = cells.length >= 3 ? cells[2] : cells[1];
-        const link = page$(downloadCell).find('a').attr('href');
+
+    const $ = cheerio.load(html);
+    let stableLink: string | null = null;
+
+    // 2. The Sniper: Find the newest Stable Release Link
+    $('.appRow .appRowTitle a, .appRow a.fontBlack').each((_, el) => {
+      const text = $(el).text().toLowerCase();
+      const href = $(el).attr('href');
+      
+      if (href && href.includes('-release/') && 
+          !text.includes('beta') && !text.includes('alpha') && !text.includes('developer') && 
+          !text.includes('nightly') && !text.includes('wear os') && !text.includes('daydream') && 
+          !text.includes('tv') && !text.includes('auto') && !text.includes('klar') && !text.includes('lite')) {
         
-        if (arch && link) {
-          const downloadLink = link.startsWith('http') ? link : `${APK_MIRROR_BASE_URL}${link}`;
-          variants.push({ version, arch, dpi, downloadUrl: downloadLink });
-        }
+        const cleanHref = href.startsWith('/') ? href : `/${href}`;
+        stableLink = `https://www.apkmirror.com${cleanHref}`;
+        return false; // Stop at the first (newest) stable match!
       }
     });
+
+    if (!stableLink) throw new Error('No stable release found on this page.');
+
+    // ⏱️ CLOUDFLARE COOL-DOWN: Wait 1.5 seconds before jumping to the next page!
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 3. Fetch the Release Page to get the variants table
+    const releaseResponse = await fetch(stableLink, { headers: MAGIC_HEADERS });
+    const releaseHtml = await releaseResponse.text();
     
-    return variants.length > 0 ? variants : null;
-  } catch (error) {
-    console.error('APKMirror fetch failed:', error);
+    if (releaseHtml.includes('Cloudflare') || releaseHtml.includes('Just a moment')) {
+      throw new Error('Cloudflare blocked the variant page.');
+    }
+
+    const $release = cheerio.load(releaseHtml);
+
+    // 4. Extract Version Number from the giant H1 Title (100% reliable!)
+    const pageTitle = $release('h1').text();
+    const versionMatch = pageTitle.match(/(\d+\.\d+[a-zA-Z0-9.\-]*)/);
+    const latestVersion = versionMatch ? versionMatch[1] : null;
+
+    if (!latestVersion) throw new Error('Could not extract version number from the Release Page.');
+
+    // 5. Extract Variants & Date
+    let releaseDate = "Unknown Date";
+    const variants: ApkVariant[] = [];
+    
+    let rows = $release('.table-row');
+    if (rows.length === 0) rows = $release('.variants-table .table-row');
+
+    rows.each((_, row) => {
+      const rowText = $release(row).text().toLowerCase();
+      const originalRowText = $release(row).text();
+      
+      let link = null;
+      $release(row).find('a').each((_, aTag) => {
+        const href = $release(aTag).attr('href');
+        if (href && !href.includes('#')) link = href;
+      });
+
+      if (link) {
+        let arch = 'universal';
+        if (rowText.includes('arm64-v8a')) arch = 'arm64-v8a';
+        else if (rowText.includes('armeabi-v7a')) arch = 'armeabi-v7a';
+        else if (rowText.includes('x86')) arch = 'x86';
+        
+        let dpi = 'nodpi';
+        if (rowText.includes('480dpi')) dpi = '480dpi';
+        else if (rowText.includes('400dpi')) dpi = '400dpi';
+        else if (rowText.includes('320dpi')) dpi = '320dpi';
+
+        if (releaseDate === "Unknown Date") {
+          const dateMatch = originalRowText.match(/([A-Z][a-z]{2,8}\s\d{1,2},\s\d{4})/);
+          if (dateMatch && dateMatch[1]) releaseDate = dateMatch[1];
+        }
+
+        const downloadLink = link.startsWith('http') ? link : `${APK_MIRROR_BASE_URL}${link}`;
+        variants.push({ version: latestVersion, arch, dpi, downloadUrl: downloadLink });
+      }
+    });
+
+    return { variants, latestVersion, releaseDate };
+
+  } catch (error: any) {
+    // ✨ FIX: Changed from console.error to console.log! No more ugly grey boxes on your screen!
+    console.log('Lightning Scraper Error:', error.message);
     return null;
   }
 };

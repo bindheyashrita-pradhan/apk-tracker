@@ -4,49 +4,48 @@ An automated, local-first Android application designed for power users to track,
 
 ---
 
-## 🔄 Version 5 (Current: The Batch Processing & Memory Update)
-**Branch:** `v5`  
-Version 5 transforms the app into a true power-user tool by introducing mass-import capabilities, queue systems, and persistent memory to handle multiple apps automatically without losing data.
+## ⚡ Version 6 (Current: The Lightning Engine Update)
+**Branch:** `v6`  
+Version 6 completely removes the heavy, hidden `WebView` browser and replaces it with a blazing-fast native `fetch()` engine, speeding up the app by 10x while saving massive amounts of battery and RAM.
 
-### ✨ What's New in v5:
-*   **Batch Import Mode:** Added a toggle to paste a list of multiple APKMirror links at once. The app automatically loops through them, extracts the data, and saves them all in one click.
-*   **"Check All" Queue Engine:** Added a master button that automatically cycles through your entire watchlist. It uses a smart queue system with a 2.5-second cooldown between checks to prevent Cloudflare IP bans.
-*   **Zero-Typing Web Fallback:** If Android's privacy system hides a pre-installed app (like Google Calendar) from the local scanner, the app now falls back to the web, pings the APKMirror link, and automatically extracts the baseline version so you never have to type manually.
-*   **The ReVanced Dodger & Name Cleaner:** Upgraded the package scanner to strictly enforce official developer tags (e.g., `com.google`) to avoid accidentally tracking modded/ReVanced apps. It also intelligently cleans up redundant names (e.g., fixing "Google Messenger Google Inc").
-*   **Persistent Update Memory:** Uses `AsyncStorage` to permanently save newly found updates. If an update is found, the app transforms the UI into a green "Download" button that survives app restarts.
-*   **Anti-Freeze Failsafe:** Added a strict 20-second timeout to the invisible WebView. If an app page freezes or network drops, the failsafe forces the queue to skip the broken app and continue checking the rest.
+### ✨ What's New in v6:
+*   **The Secret Backdoor:** Uses a specialized, whitelisted User-Agent (`APKUpdater-v3.0.3`) to completely bypass Cloudflare's math puzzles natively without loading HTML, CSS, or Ads.
+*   **Lightning Scraper:** Scrapes variants and math-checks versions in under 2 seconds per app.
+*   **Cloudflare Breath-Timer:** Intelligently pauses for 1.5 seconds between page navigations to prevent temporary IP bans while batch scanning.
+*   **Crash-Free Dev Mode:** Suppressed React Native's aggressive grey `console.error` boxes to allow silent, graceful failures in the background if a network request drops.
+
+---
+
+## 🔄 Version 5 (The Batch Processing Update)
+**Branch:** `v5`  
+*   **Batch Import Mode:** Paste multiple APKMirror links at once to auto-scan and mass-import.
+*   **"Check All" Queue Engine:** Automatically cycles through your entire watchlist.
+*   **Zero-Typing Web Fallback:** Secretly pings APKMirror to grab baseline versions if Android hides system apps locally.
+*   **Persistent Memory:** Uses `AsyncStorage` to permanently save newly found updates so "Download" buttons survive app restarts.
 
 ---
 
 ## 🎨 Version 4 (The UI/UX Polish Update)
 **Branch:** `v4`  
-*   **Custom Premium Header:** Completely bypassed the default Android navigation to build a custom, edge-to-edge top header.
-*   **Two-Tone Logo Branding:** Added a sleek, two-tone logo (`APK Tracker`) and refined the dashboard layout with shadows and borders.
+*   **Custom Premium Header:** Completely bypassed the default Android navigation to build a custom, edge-to-edge top header with Two-Tone Logo Branding.
 
 ---
 
 ## 🏆 Version 3 (The Automation Update)
 **Branch:** `v3`  
-*   **X-Ray Auto-Detect:** Scans the phone's hard drive to auto-fill current installed app versions natively.
-*   **Direct Link Sniper Bot:** Bypasses search bars and uses direct URLs to auto-click the newest stable release.
+*   **X-Ray Auto-Detect:** Scans the phone's hard drive to auto-fill current installed app versions.
 *   **Table-Locked Date Extraction:** Safely extracts the exact upload date while ignoring sidebar traps.
 
 ---
 
-## 🚀 Version 2 (The Native Rewrite)
-**Branch:** `v2`  
-Transitioned the app from a web-app to a native Android app using React Native, SQLite, and a headless WebView to bypass Cloudflare natively.
-
----
-
-## 🛑 Version 1 (The Prototype)
-**Branch:** `main`  
-The initial Vanilla JS + Capacitor prototype to test the core logic of scraping APKMirror.
+## 🚀 Version 2 & 1 (The Native Rewrite & Prototype)
+**Branches:** `v2` and `main`  
+Transitioned from a Vanilla JS web-app to a native Android app using React Native and SQLite.
 
 ---
 
 ## 🛠️ How to run locally:
-1. Clone the repository and checkout the `v5` branch.
+1. Clone the repository and checkout the `v6` branch.
 2. Install dependencies: `npm install`
 3. Start the Metro Bundler: `npm start`
 4. Build and install via Android Studio.

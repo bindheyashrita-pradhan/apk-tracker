@@ -1,26 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking } from 'react-native';
-import { WebView } from 'react-native-webview';
-import * as cheerio from 'cheerio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { getAllWatchlistItems, deleteWatchlistItem } from '../database/WatchlistDao';
-import { WatchlistItem, ApkVariant } from '../types';
+import { WatchlistItem } from '../types';
 import { findBestVariant } from '../services/PriorityMatcher';
 import { isNewerVersion } from '../services/VersionComparator';
-import { APK_MIRROR_BASE_URL } from '../utils/constants';
+import { fetchLatestVersion } from '../services/ApkMirrorService';
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const WatchlistScreen = ({ navigation }: any) => {
   const isDarkMode = useDarkMode();
   const [savedApps, setSavedApps] = useState<WatchlistItem[]>([]);
   
   const [scanningApp, setScanningApp] = useState<WatchlistItem | null>(null);
-  const [scrapeUrl, setScrapeUrl] = useState<string | null>(null);
-
   const [isCheckingAll, setIsCheckingAll] = useState(false);
-  const [checkQueue, setCheckQueue] = useState<WatchlistItem[]>([]);
-  
-  // 💾 PERMANENT MEMORY FOR UPDATES
   const [updatesFound, setUpdatesFound] = useState<Record<string, {version: string, url: string, date: string}>>({});
 
   const loadApps = async () => {
@@ -28,71 +23,17 @@ export const WatchlistScreen = ({ navigation }: any) => {
     setSavedApps(apps);
   };
 
-  // Load apps AND saved updates when the screen opens
   useEffect(() => {
     loadApps();
-    
-    // Load the saved Green Buttons from memory!
     AsyncStorage.getItem('pendingUpdates').then(data => {
       if (data) setUpdatesFound(JSON.parse(data));
     });
-
     const unsubscribe = navigation.addListener('focus', () => loadApps());
     return unsubscribe;
   }, [navigation]);
 
-  // 🛡️ THE FAILSAFE: If a page freezes, skip it after 20 seconds so the queue doesn't get stuck!
-  useEffect(() => {
-    let failsafe: NodeJS.Timeout;
-    if (scanningApp) {
-      failsafe = setTimeout(() => {
-        if (isCheckingAll) advanceQueue(); // Force it to move to the next app
-        else { setScrapeUrl(null); setScanningApp(null); Alert.alert('Timeout', 'The scan took too long and was aborted.'); }
-      }, 20000);
-    }
-    return () => clearTimeout(failsafe);
-  }, [scanningApp, isCheckingAll]);
-
-  // 🔄 THE QUEUE ENGINE
-  useEffect(() => {
-    if (isCheckingAll && !scanningApp) {
-      if (checkQueue.length > 0) {
-        const nextApp = checkQueue[0];
-        setScanningApp(nextApp);
-        setScrapeUrl(nextApp.searchTerm);
-      } else {
-        setIsCheckingAll(false);
-        Alert.alert('Batch Scan Complete! 🎉', `Finished checking all apps in your Watchlist.`);
-      }
-    }
-  }, [checkQueue, isCheckingAll, scanningApp]);
-
-  const advanceQueue = () => {
-    setScrapeUrl(null);
-    // ⏱️ CLOUDFLARE COOL-DOWN: Wait 2.5 seconds before checking the next app to prevent IP bans!
-    setTimeout(() => {
-      setScanningApp(null);
-      if (isCheckingAll) {
-        setCheckQueue(prev => prev.slice(1));
-      }
-    }, 2500); 
-  };
-
-  const handleCheckUpdate = (app: WatchlistItem) => {
-    if (isCheckingAll) return; 
-    setScanningApp(app);
-    setScrapeUrl(app.searchTerm); 
-  };
-
-  const startBatchCheck = () => {
-    if (savedApps.length === 0) return Alert.alert('Empty', 'Add some apps first!');
-    setIsCheckingAll(true);
-    setCheckQueue([...savedApps]);
-  };
-
   const handleDelete = async (packageName: string) => {
     await deleteWatchlistItem(packageName);
-    // Also clear any pending updates for this deleted app
     const newUpdates = { ...updatesFound };
     delete newUpdates[packageName];
     setUpdatesFound(newUpdates);
@@ -100,12 +41,10 @@ export const WatchlistScreen = ({ navigation }: any) => {
     loadApps();
   };
 
-  // 🗑️ CLEAR UPDATE NOTIFICATION
   const handleDownload = (packageName: string, url: string) => {
     Linking.openURL(url);
     Alert.alert(
-      "Download Started ⬇️",
-      "Did you successfully install this update? If yes, we can clear this notification.",
+      "Download Started ⬇️", "Did you successfully install this update?",
       [
         { text: "Not Yet", style: "cancel" },
         { 
@@ -114,133 +53,75 @@ export const WatchlistScreen = ({ navigation }: any) => {
             const newUpdates = { ...updatesFound };
             delete newUpdates[packageName];
             setUpdatesFound(newUpdates);
-            AsyncStorage.setItem('pendingUpdates', JSON.stringify(newUpdates)); // Save cleared state
+            AsyncStorage.setItem('pendingUpdates', JSON.stringify(newUpdates));
           }
         }
       ]
     );
   };
 
-  const handleBrowserMessage = (event: any) => {
-    const htmlCode = event.nativeEvent.data;
-
-    if (htmlCode === 'NO_RESULTS') {
-      if (!isCheckingAll) Alert.alert('Not Found', 'Could not find a stable release on this page.');
-      advanceQueue(); return;
-    }
+  // ⚡ THE LIGHTNING SCANNER (No WebView Needed!)
+  const performCheck = async (app: WatchlistItem, isBatch: boolean) => {
+    setScanningApp(app);
     
-    if (htmlCode.includes('Just a moment') || htmlCode.includes('Cloudflare')) return;
+    // Call our new super-fast background fetcher!
+    const result = await fetchLatestVersion(app.searchTerm);
 
-    if (!scanningApp) { advanceQueue(); return; }
-
-    const $ = cheerio.load(htmlCode);
-    const variants: ApkVariant[] = [];
-
-    const pageTitle = $('h1').text();
-    const versionMatch = pageTitle.match(/(\d+\.\d+[a-zA-Z0-9.\-]*)/);
-    let latestVersion = versionMatch ? versionMatch[1] : null;
-
-    if (!latestVersion) {
-      if (!isCheckingAll) Alert.alert('Scan Failed', 'Could not extract the version number.');
-      advanceQueue(); return;
+    if (!result) {
+      if (!isBatch) Alert.alert('Scan Failed', 'Could not fetch data from APKMirror. Cloudflare might be active.');
+      setScanningApp(null);
+      return;
     }
 
-    let releaseDate = "Unknown Date";
-    let rows = $('.table-row');
-    if (rows.length === 0) rows = $('.variants-table .table-row');
-
-    rows.each((_, row) => {
-      const rowText = $(row).text().toLowerCase();
-      const originalRowText = $(row).text(); 
-      let link = null;
-      $(row).find('a').each((_, aTag) => {
-        const href = $(aTag).attr('href');
-        if (href && !href.includes('#')) link = href;
-      });
-
-      if (link) {
-        let arch = 'universal';
-        if (rowText.includes('arm64-v8a')) arch = 'arm64-v8a';
-        else if (rowText.includes('armeabi-v7a')) arch = 'armeabi-v7a';
-        else if (rowText.includes('x86')) arch = 'x86';
-        
-        let dpi = 'nodpi';
-        if (rowText.includes('480dpi')) dpi = '480dpi';
-        else if (rowText.includes('400dpi')) dpi = '400dpi';
-        else if (rowText.includes('320dpi')) dpi = '320dpi';
-
-        if (releaseDate === "Unknown Date") {
-          const dateMatch = originalRowText.match(/([A-Z][a-z]{2,8}\s\d{1,2},\s\d{4})/);
-          if (dateMatch && dateMatch[1]) releaseDate = dateMatch[1];
-        }
-
-        const downloadLink = link.startsWith('http') ? link : `${APK_MIRROR_BASE_URL}${link}`;
-        variants.push({ version: latestVersion, arch, dpi, downloadUrl: downloadLink });
-      }
-    });
-
-    const bestMatch = findBestVariant(variants);
+    const bestMatch = findBestVariant(result.variants);
 
     if (bestMatch.variant) {
-      const hasUpdate = isNewerVersion(scanningApp.currentVersion, latestVersion);
+      const hasUpdate = isNewerVersion(app.currentVersion, result.latestVersion);
       if (hasUpdate) {
         
-        // 💾 SAVE THE UPDATE PERMANENTLY!
-        const newUpdates = { ...updatesFound, [scanningApp.packageName]: { version: latestVersion, url: bestMatch.variant!.downloadUrl, date: releaseDate } };
-        setUpdatesFound(newUpdates);
-        AsyncStorage.setItem('pendingUpdates', JSON.stringify(newUpdates));
+        // Save the update permanently!
+        setUpdatesFound(prev => {
+          const updated = { ...prev, [app.packageName]: { version: result.latestVersion!, url: bestMatch.variant!.downloadUrl, date: result.releaseDate } };
+          AsyncStorage.setItem('pendingUpdates', JSON.stringify(updated));
+          return updated;
+        });
 
-        if (!isCheckingAll) {
+        if (!isBatch) {
           Alert.alert(
             '🚀 UPDATE FOUND!',
-            `Current: v${scanningApp.currentVersion}\nNew: v${latestVersion}\n📅 Released: ${releaseDate}\n\n${bestMatch.message}`,
-            [{ text: 'Cancel', style: 'cancel' }, { text: 'Download Update', onPress: () => handleDownload(scanningApp!.packageName, bestMatch.variant!.downloadUrl) }]
+            `Current: v${app.currentVersion}\nNew: v${result.latestVersion}\n📅 Released: ${result.releaseDate}\n\n${bestMatch.message}`,
+            [{ text: 'Cancel', style: 'cancel' }, { text: 'Download Update', onPress: () => handleDownload(app.packageName, bestMatch.variant!.downloadUrl) }]
           );
         }
       } else {
-        if (!isCheckingAll) Alert.alert('Up To Date! ✅', `You already have the newest version (v${scanningApp.currentVersion}).\n📅 Latest release: ${releaseDate}`);
+        if (!isBatch) Alert.alert('Up To Date! ✅', `You already have the newest version (v${app.currentVersion}).`);
       }
     } else {
-      if (!isCheckingAll) Alert.alert('No Compatible APK', `Found an update (v${latestVersion}), but couldn't find an arm64-v8a version.`);
+      if (!isBatch) Alert.alert('No Match', bestMatch.message);
     }
-
-    advanceQueue();
+    
+    setScanningApp(null);
   };
 
-  const autoClickerBot = `
-    setTimeout(function() {
-      if (!window.location.href.includes('-release/')) {
-        var titles = document.querySelectorAll('.appRow .appRowTitle a, .appRow a.fontBlack');
-        var stableLink = null;
-        for (var i = 0; i < titles.length; i++) {
-          var text = titles[i].textContent.toLowerCase();
-          if (!text.includes('beta') && !text.includes('alpha') && !text.includes('developer') && 
-              !text.includes('nightly') && !text.includes('wear os') && !text.includes('daydream') && 
-              !text.includes('tv') && !text.includes('auto') && !text.includes('klar') && !text.includes('lite')) {
-            stableLink = titles[i];
-            break; 
-          }
-        }
-        if (stableLink) {
-          window.location.href = stableLink.href; 
-        } else {
-          window.ReactNativeWebView.postMessage('NO_RESULTS');
-        }
-      } 
-      else {
-        window.ReactNativeWebView.postMessage(document.documentElement.outerHTML);
-      }
-    }, 4500); 
-    true;
-  `;
+  // 🚀 THE BATCH SCANNER (Lightning Fast)
+  const startBatchCheck = async () => {
+    if (savedApps.length === 0) return Alert.alert('Empty', 'Add some apps first!');
+    setIsCheckingAll(true);
+
+    for (let i = 0; i < savedApps.length; i++) {
+      await performCheck(savedApps[i], true);
+      // Wait 1.5 seconds between apps so APKMirror doesn't IP Ban us for spamming!
+      if (i < savedApps.length - 1) await sleep(1500); 
+    }
+
+    setIsCheckingAll(false);
+    Alert.alert('Batch Scan Complete! 🎉', `Finished checking all apps in your Watchlist.`);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#F5F5F5' }]}>
-      
       <View style={[styles.topHeader, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
-        <Text style={[styles.mainTitle, { color: isDarkMode ? '#FFFFFF' : '#222222' }]}>
-          <Text style={{ color: '#2196F3' }}>APK</Text> Tracker
-        </Text>
+        <Text style={[styles.mainTitle, { color: isDarkMode ? '#FFFFFF' : '#222222' }]}><Text style={{ color: '#2196F3' }}>APK</Text> Tracker</Text>
       </View>
 
       <FlatList
@@ -249,20 +130,14 @@ export const WatchlistScreen = ({ navigation }: any) => {
         keyExtractor={(item) => item.packageName}
         ListHeaderComponent={
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginLeft: 5 }}>
-            <Text style={{ color: isDarkMode ? '#00c853' : '#009624', fontSize: 18, fontWeight: 'bold' }}>
-              My Watchlist 🚀
-            </Text>
-            
+            <Text style={{ color: isDarkMode ? '#00c853' : '#009624', fontSize: 18, fontWeight: 'bold' }}>My Watchlist 🚀</Text>
             <TouchableOpacity 
               style={{ backgroundColor: '#673AB7', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 6, flexDirection: 'row', alignItems: 'center', elevation: 2 }}
               onPress={startBatchCheck}
-              disabled={scanningApp !== null}
+              disabled={isCheckingAll}
             >
               {isCheckingAll ? (
-                <>
-                  <ActivityIndicator color="#FFF" size="small" style={{ marginRight: 8 }} />
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>{checkQueue.length} LEFT</Text>
-                </>
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>⏳ SCANNING...</Text>
               ) : (
                 <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>🔄 CHECK ALL</Text>
               )}
@@ -292,25 +167,13 @@ export const WatchlistScreen = ({ navigation }: any) => {
                   <Text style={{ color: scanningApp ? '#ccc' : '#FF0000' }}>🗑️</Text>
                 </TouchableOpacity>
                 
-                {/* 🌟 GREEN PERMANENT DOWNLOAD BUTTON */}
                 {update ? (
-                  <TouchableOpacity 
-                    style={[styles.checkButton, { backgroundColor: '#00c853' }]}
-                    onPress={() => handleDownload(item.packageName, update.url)}
-                  >
+                  <TouchableOpacity style={[styles.checkButton, { backgroundColor: '#00c853' }]} onPress={() => handleDownload(item.packageName, update.url)}>
                     <Text style={styles.checkButtonText}>⬇️ Download</Text>
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity 
-                    style={[styles.checkButton, scanningApp?.packageName === item.packageName && { backgroundColor: '#888' }]}
-                    onPress={() => handleCheckUpdate(item)}
-                    disabled={scanningApp !== null}
-                  >
-                    {scanningApp?.packageName === item.packageName ? (
-                      <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                      <Text style={styles.checkButtonText}>Check</Text>
-                    )}
+                  <TouchableOpacity style={[styles.checkButton, scanningApp?.packageName === item.packageName && { backgroundColor: '#888' }]} onPress={() => performCheck(item, false)} disabled={scanningApp !== null || isCheckingAll}>
+                    {scanningApp?.packageName === item.packageName ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.checkButtonText}>Check</Text>}
                   </TouchableOpacity>
                 )}
               </View>
@@ -320,22 +183,10 @@ export const WatchlistScreen = ({ navigation }: any) => {
       />
 
       <View style={{ padding: 20, paddingTop: 0 }}>
-        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddApp')} disabled={scanningApp !== null}>
+        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddApp')} disabled={isCheckingAll}>
           <Text style={styles.addButtonText}>+ Add a New App</Text>
         </TouchableOpacity>
       </View>
-
-      {scrapeUrl && (
-        <View style={{ width: 0, height: 0, overflow: 'hidden', opacity: 0 }}>
-          <WebView
-            source={{ uri: scrapeUrl }}
-            userAgent="Mozilla/5.0 (Linux; Android 14; RMX3571) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-            injectedJavaScript={autoClickerBot}
-            onMessage={handleBrowserMessage}
-            onError={() => advanceQueue()} // On Internet loss, skip gracefully!
-          />
-        </View>
-      )}
     </View>
   );
 };
